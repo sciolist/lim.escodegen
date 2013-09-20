@@ -932,8 +932,30 @@
             break;
 
         case Syntax.ArrowFunctionExpression:
-            allowIn |= (Precedence.ArrowFunction < precedence);
-            result = parenthesize(generateFunctionBody(expr), Precedence.ArrowFunction, precedence);
+            delete expr.type;
+            expr.expression = false;
+            result = [(expr.generator && !extra.moz.starlessGenerator ? 'function*' : 'function')];
+
+            if(expr.body.type !== Syntax.BlockStatement) {
+                expr.body = {
+                    type: Syntax.BlockStatement,
+                    body: [{
+                        type: Syntax.ReturnStatement,
+                        argument: expr.body
+                    }]
+                }
+            };
+
+            if (expr.id) {
+                result = [result, noEmptySpace(),
+                          generateIdentifier(expr.id),
+                          generateFunctionBody(expr)];
+            } else {
+                result = [result + space, generateFunctionBody(expr)];
+            }
+
+            //allowIn |= (Precedence.ArrowFunction < precedence);
+            //result = parenthesize(generateFunctionBody(expr), Precedence.ArrowFunction, precedence);
             break;
 
         case Syntax.ConditionalExpression:
