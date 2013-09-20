@@ -35,6 +35,9 @@
 (function () {
     'use strict';
 
+    var _uid = 0;
+    function uid(name) { return '$es6$' + name + (++_uid) }
+
     var Syntax,
         Precedence,
         BinaryPrecedence,
@@ -84,6 +87,7 @@
         ExpressionStatement: 'ExpressionStatement',
         ForStatement: 'ForStatement',
         ForInStatement: 'ForInStatement',
+        ForOfStatement: 'ForOfStatement',
         FunctionDeclaration: 'FunctionDeclaration',
         FunctionExpression: 'FunctionExpression',
         Identifier: 'Identifier',
@@ -1837,6 +1841,103 @@
                 }
             });
 
+            result.push(maybeBlock(stmt.body, semicolon === ''));
+            break;
+
+        case Syntax.ForOfStatement:
+            result = ['for' + space + '('];
+            withIndent(function () {
+                var id = uid(), init, iteratorName, iteratorStateName;
+                iteratorName = { type: Syntax.Identifier, name: uid('it') };
+                iteratorStateName =  { type: Syntax.Identifier, name: uid('its') };
+
+                // for($;;){}
+                var init = { type: Syntax.VariableDeclaration, kind: 'var', declarations: [] };
+                init.declarations.push({
+                    type: Syntax.VariableDeclarator,
+                    id: iteratorName,
+                    init: {
+                        type: Syntax.CallExpression,
+                        arguments: [],
+                        callee: {
+                            type: Syntax.MemberExpression,
+                            computed: false,
+                            object: stmt.right,
+                            property: { type: Syntax.Identifier, name: 'iterator' }
+                        }
+                    }
+                });
+
+                init.declarations.push({
+                    type: Syntax.VariableDeclarator,
+                    id: iteratorStateName,
+                    init: {
+                        type: Syntax.CallExpression,
+                        arguments: [],
+                        callee: {
+                            type: Syntax.MemberExpression,
+                            computed: false,
+                            object: iteratorName,
+                            property: { type: Syntax.Identifier, name: 'next' }
+                        }
+                    }
+                });
+
+                if (stmt.left.type === Syntax.VariableDeclaration) {
+                    init.declarations.push.apply(init.declarations, stmt.left.declarations);
+                }
+                result.push(generateStatement(init));
+
+                // for(;$;){}
+                result.push(generateExpression({
+                    type: Syntax.UnaryExpression,
+                    operator: '!',
+                    argument: {
+                        type: Syntax.MemberExpression,
+                        computed: false,
+                        object: iteratorStateName,
+                        property: { type: Syntax.Identifier, name: 'done' }
+                    }
+                }, {}));
+                result.push(';');
+
+                // for(;;$){}
+                result.push(generateExpression({
+                    type: Syntax.AssignmentExpression,
+                    operator: '=',
+                    left: iteratorStateName,
+                    right: {
+                        type: Syntax.CallExpression,
+                        arguments: [],
+                        callee: {
+                            type: Syntax.MemberExpression,
+                            computed: false,
+                            object: iteratorName,
+                            property: { type: Syntax.Identifier, name: 'next' }
+                        }
+                    }
+                }, {}));
+                result.push(')');
+
+                // for(;;){$}
+                if(stmt.body.type !== Syntax.BlockStatement) {
+                    stmt.body = { type: Syntax.BlockStatement, body: [stmt.body] }
+                }
+                stmt.body.body.splice(0, 0, {
+                    type: Syntax.ExpressionStatement,
+                    expression: {
+                        type: Syntax.AssignmentExpression,
+                        operator: '=',
+                        left: stmt.left.declarations[0].id,
+                        right: {
+                            type: Syntax.MemberExpression,
+                            computed: false,
+                            object: iteratorStateName,
+                            property: { type: 'Identifier', name: 'value' }
+                        }
+                    }
+                });
+            });
             result.push(maybeBlock(stmt.body, semicolon === ''));
             break;
 
